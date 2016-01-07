@@ -14,4 +14,6 @@ Run the client as:
 
 python py/client.py audio/hello_world_16khz.wav --url http://<url provided by Cobalt>
 
+Expected results:
+
 {"message": "returning results", "results": [{"status": "partial", "version": "1", "cobalt_object": "stt_result", "features": null, "nbest": [{"confidence": 1000, "hypothesis": [{"confidence": 1000, "type": "token", "features": null, "value": "Hello"}]}]}, {"status": "final", "version": "1", "cobalt_object": "stt_result", "features": null, "nbest": [{"confidence": 1000, "hypothesis": [{"confidence": 1000, "type": "token", "features": null, "value": "Hello"}, {"confidence": 1000, "type": "token", "features": null, "value": "World"}]}]}]}
