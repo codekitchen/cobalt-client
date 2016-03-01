@@ -1,5 +1,7 @@
 This package contains client code and API documentation for Cobalt's ASR service. Cobalt will provide interested customers an endpoint for our speech demo.
 
+Requirement: This package requires python2.7, and the requests package: http://docs.python-requests.org/en/master/
+
 The demo service is not meant to serve as part of any production system. The service recognizes 16khz audio, sent as 16 bit PCM samples. There are no performance or support service level agreements for this service. While our goal is to provide a stable interface, Cobalt reserves the right to change the API and endpoint URL at any time. Please contact us (http://www.cobaltspeech.com/contact-us.html) if you are interested in a production quality service.
 
 Directory structure:
