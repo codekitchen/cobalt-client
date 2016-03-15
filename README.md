@@ -1,14 +1,13 @@
-This package contains client code and API documentation for Cobalt's ASR service. Cobalt will provide interested customers an endpoint for our speech demo.
+This package contains client code and API documentation for Cobalt's ASR (automatic speech recognition) service. Cobalt will provide interested customers an endpoint URL for a demo ASR model to use with this client package.  Please contact us at http://cobaltspeech.com/contact-us.html to obtain it.
+
+The demo service is not meant to serve as part of any production system. There are no performance or support service level agreements for this service. While our goal is to provide a stable interface, Cobalt reserves the right to change the API and endpoint URL at any time. The demo recognizes 16khz mono-channel audio, sent as 16 bit PCM samples. It is for general conversational uni-speaker English spoken in a noise-free background.  Please contact us at (http://cobaltspeech.com/contact-us.html) if you are interested in different audio formats, a production quality service, domain/application-specific models with improved accuracy/speed, other languages, speaker diarization, or any customization. 
 
 Requirement: This package requires python2.7, and the requests package: http://docs.python-requests.org/en/master/
+The py/client directory contains an example python client.
+You will need to install python's requests module to use the example client.
 
-The demo service is not meant to serve as part of any production system. The service recognizes 16khz audio, sent as 16 bit PCM samples. There are no performance or support service level agreements for this service. While our goal is to provide a stable interface, Cobalt reserves the right to change the API and endpoint URL at any time. Please contact us (http://www.cobaltspeech.com/contact-us.html) if you are interested in a production quality service.
-
-Directory structure:
-
-The docs directory contains HTML documentation for our API and objects: "ASR Web Api.html" describes and "Result Objects Model.html" describes the results object model.
-
-The py/client directory contains an example python client. You will need to install python's requests module to use the example client.
+See the github wiki at https://github.com/cobaltspeech/cobalt-client/wiki
+for documentation on how to use this client with our API and result objects: "ASR Web Api" and "Result Objects Model".
 
 The audio directory contains a single 16khz audio file.
 
