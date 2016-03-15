@@ -1,7 +1,7 @@
-import os, json
-import scipy.io.wavfile
+import os, json, time
 from multiprocessing import Process, Queue
-from client_utils import get_audio_and_construct, send_wav_audio_file, recognize_stream_audio
+from client_utils import get_audio_and_construct, send_wav_audio_file, \
+                        recognize_stream_audio, get_file_data, recognize_long_wav_file
 
 def writer(dest_filename, queue, stop_token):
     with open(dest_filename, 'w') as dest_file:
@@ -26,19 +26,19 @@ class MultiProcessFileWriter:
         self.queue.put(line)
 
 class AudioSender:
-    def __init__(self, audio_files, url, transmit_method, loop, results_writer=None, metrics_writer=None):
+    def __init__(self, audio_files, url, transmit_method, loop, running_time, results_writer=None, metrics_writer=None):
         self.audio_files = audio_files
         self.url = url
         self.transmit_method = transmit_method
         self.loop = loop
+        self.running_time = running_time
         self.results_writer = results_writer
         self.metrics_writer = metrics_writer
 
     def save_results_and_metrics(self, results, time_elapsed_seconds, file):
         # save metrics
         if self.metrics_writer:
-            rate, data = scipy.io.wavfile.read(file)
-            file_audio_seconds = float(len(data)) / rate
+            sample_rate, frames, file_audio_seconds = get_file_data(file)
             metrics_dict = {'filename': file,
                             'file_audio_seconds': file_audio_seconds,
                             'time_elapsed_seconds': time_elapsed_seconds,
@@ -57,6 +57,8 @@ class AudioSender:
             print results
 
     def run(self):
+
+        init_time = time.time()
         while True:
             for work in self.audio_files:
                 audio, recognizer_construct = get_audio_and_construct(work)
@@ -66,12 +68,23 @@ class AudioSender:
                 elif self.transmit_method == 'streaming':
                     results, time_elapsed_seconds = recognize_stream_audio(self.url, audio, recognizer_construct)
                     self.save_results_and_metrics(results, time_elapsed_seconds, audio)
+                elif self.transmit_method == 'long-file':
+                    results, time_elapsed_seconds = recognize_long_wav_file(self.url, audio, recognizer_construct, verbose=True)
+                    self.save_results_and_metrics(results, time_elapsed_seconds, audio)
                 else:
                     raise Exception('unsupported transmit method: ' + self.transmit_method)
 
-            if not self.loop:
-                break
+            if self.loop <= 1: break
+            
+            if self.running_time is not None:
+                dur = time.time() - init_time
+                if dur > self.running_time: break
 
-def run_stt(audio_files, url, transmit_method, loop, results_writer, metrics_writer):
-    sender = AudioSender(audio_files, url, transmit_method, loop, results_writer, metrics_writer)
+            self.loop = self.loop - 1
+
+def run_stt(audio_files, url,
+            transmit_method, loop,
+            running_time, results_writer,
+            metrics_writer):
+    sender = AudioSender(audio_files, url, transmit_method, loop, running_time, results_writer, metrics_writer)
     sender.run()

@@ -10,10 +10,10 @@ class ListfileParser:
         # check if work is a json line
         try:
             work = json.loads(line)
-            # 'audio_path' is a required key
-            assert('audio_path' in work)
-            audiopath = self.get_audiopath(work['audio_path'], self.listfile_dir)
-            work['audio_path'] = audiopath
+            # 'audio_file' is a required key
+            assert('audio_file' in work)
+            audiopath = self.get_audiopath(work['audio_file'], self.listfile_dir)
+            work['audio_file'] = audiopath
             return work
         except ValueError: # json decoding exception.
             # exceptions are ok.
@@ -26,7 +26,7 @@ class ListfileParser:
             raise Exception('Unknown listfile format ' + line)
 
         audiopath = self.get_audiopath(filename, self.listfile_dir)
-        work['audio_path'] = audiopath
+        work['audio_file'] = audiopath
         return work
 
     def get_audiopath(self, filename, listfile_dirpath):

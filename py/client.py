@@ -13,7 +13,7 @@ if __name__ == '__main__':
                    help='url to send requests to')
     parser.add_argument('--transmit_method', type=str, default='file',
                    help='method for data transmission')
-    parser.add_argument('--loop', type=bool, default=False,
+    parser.add_argument('--loop', type=int, default=1,
                    help='loop the file(s)')
     parser.add_argument('--processes', type=int, default=1,
                    help='send the files in parallel')
@@ -40,14 +40,15 @@ if __name__ == '__main__':
         audio_files = parser.parse_listfile()
     else:
         # the argument is an audio file, but we make it a JSon so we can execute the same processing code later.
-        audio_files = [{'audio_path': args.audiofile}]
+        audio_files = [{'audio_file': args.audiofile}]
 
+    running_time = None # no limit for running time
     processes = list()
     partitioner = RoundRobinPartitioner(audio_files, args.processes)
     partitions = partitioner.partition(args.stress_same)
     for t in range(0, len(partitions)):
         p = Process(target=run_stt,
-                    args=(partitions[t], args.url, args.transmit_method, args.loop, results_writer, metrics_writer))
+                    args=(partitions[t], args.url, args.transmit_method, args.loop, running_time, results_writer, metrics_writer))
         p.start()
         processes.append(p)
 

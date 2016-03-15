@@ -1,5 +1,17 @@
-import requests, json
+import Queue
+from threading import Thread
+import json
 import time
+import wave
+import requests
+
+def get_file_data(file):
+    wave_read = wave.open(file, 'r')
+    sample_rate = wave_read.getframerate()
+    frames = wave_read.getnframes()
+    file_audio_seconds = float(frames) / sample_rate
+    wave_read.close()
+    return sample_rate, frames, file_audio_seconds
 
 def get_stt_one_best(stt_result):
     one_best = list()
@@ -8,7 +20,7 @@ def get_stt_one_best(stt_result):
     return one_best
 
 def check_recognizer_construct(recognizer_construct):
-    allowed_keys = ['model-id', 'model-domain', 'transcripts', 'recognizer-type']
+    allowed_keys = ['model-id', 'model-domain', 'transcripts', 'recognizer-type', 'timeout', 'synchronous']
     for key in recognizer_construct:
         if key not in allowed_keys:
             raise Exception('unknown key found in recognizer_construct ' + key)
@@ -35,15 +47,15 @@ def send_fail_call(url, expected_error_msg=None, header=None, data=None, verbose
         assert(expected_error_msg in response_dict['error']['message'])
 
 # expect this call to succeed
-def send_create_recognizer(url, recognizer_construct, requests_obj=requests, timeout=None):
+def send_create_recognizer(url, recognizer_construct, is_extended=False, requests_obj=requests):
     header = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-    data = {'type': 'create-recognizer'}
+    if is_extended:
+        data = {'type': 'create-extended-recognizer'}
+    else:
+        data = {'type': 'create-recognizer'}
     if recognizer_construct is not None:
         check_recognizer_construct(recognizer_construct)
         data.update(recognizer_construct)
-
-    if timeout:
-        data['timeout'] = timeout
     response = requests_obj.post(url, headers=header, data=json.dumps(data))
     if response.status_code != 200:
         raise Exception('create recognizer api failed: ' +response.text )
@@ -62,7 +74,7 @@ def send_delete_recognizer(url, recognizer_id, requests_obj=requests):
 
 def check_response_success(response, expected_message=None):
     if response.status_code != 200:
-        raise Exception('api call failed!')
+        raise Exception('api call failed! ' + response.text)
     if expected_message:
         response_dict = json.loads(response.text)
         assert(expected_message in response_dict['message'])
@@ -97,25 +109,29 @@ def send_get_result(post_obj, url, recognizer_id, expected_message=None):
     response = post_obj.post(url, headers=header)
     return check_response_success(response, expected_message=expected_message)
 
+def wav_file_iter(audio_filepath):
+    # for a 16khz file, this is 3200 samples -> 200 msec per chunk
+    chunk_size = 6400
+    # this is a .wav file, so we remove the first 44 bits.
+    begin_index = 44
+
+    with open(audio_filepath, 'rb') as infile:
+        infile.read(begin_index)
+        while True:
+            data = infile.read(chunk_size)
+            if data:
+                yield data
+            else:
+                break
+
 def recognize_stream_audio(base_url, audio_filepath, recognizer_construct=None):
     recognize_url = base_url+ '/recognize'
     api_url = base_url+ '/api'
-    data = open(audio_filepath, 'rb').read()
-
-    # for a 16khz file, this is 3200 samples -> 200 msec per chunk
-    chunk = 6400
-    # this is a .wav file, so we remove the first 44 bits.
-    begin_index = 44
     start = time.time()
     requests_obj = requests.Session()
-    recognizer_id = send_create_recognizer(api_url, recognizer_construct, requests_obj=requests_obj)
-    while begin_index < len(data):
-        if begin_index + chunk - 1 <= len(data):
-            end_index = begin_index + chunk
-        else:
-            end_index = len(data)
-        send_stream_audio(requests_obj, recognize_url, recognizer_id, data[begin_index:end_index])
-        begin_index += chunk
+    recognizer_id = send_create_recognizer(api_url, recognizer_construct, is_extended=False, requests_obj=requests_obj)
+    for chunk in wav_file_iter(audio_filepath):
+        send_stream_audio(requests_obj, recognize_url, recognizer_id, chunk)
     send_clear_audio_queue(requests_obj, recognize_url, recognizer_id)
     send_end_session(requests_obj, recognize_url, recognizer_id)
 
@@ -125,12 +141,91 @@ def recognize_stream_audio(base_url, audio_filepath, recognizer_construct=None):
     end = time.time()
     return results, end - start
 
+def recognize_stream_audio_async(base_url, audio_filepath, recognizer_construct=None):
+    recognize_url = base_url + '/recognize'
+    api_url = base_url + '/api'
+
+    start = time.time()
+    requests_obj = requests.Session()
+    recognizer_construct = recognizer_construct or {}
+    recognizer_construct['synchronous'] = False
+    recognizer_id = send_create_recognizer(api_url, recognizer_construct, requests_obj=requests_obj)
+
+    results = []
+
+    def producer(queue):
+        for chunk in wav_file_iter(audio_filepath):
+            send_stream_audio(requests_obj, recognize_url, recognizer_id, chunk)
+        # block until the recognizer is done, and then we'll update the flag for the consumer
+        send_clear_audio_queue(requests_obj, recognize_url, recognizer_id)
+        send_end_session(requests_obj, recognize_url, recognizer_id)
+        # poison pill
+        queue.put(None)
+
+    def consumer(queue):
+        while True:
+            try:
+                result = send_get_result(requests_obj, recognize_url, recognizer_id, expected_message='returning results')
+                results.append(result)
+            except Exception:
+                pass
+
+            done_flag = False
+            try:
+                item = queue.get(block=False, timeout=None)
+                if item is None:
+                    done_flag = True
+            except Exception as e:
+                pass
+            if done_flag:
+                send_delete_recognizer(api_url, recognizer_id, requests_obj=requests_obj)
+                break
+
+    queue = Queue.Queue()
+    producer_queue = Thread(target=producer, args=(queue,))
+    consumer_queue = Thread(target=consumer, args=(queue,))
+    producer_queue.start()
+    consumer_queue.start()
+
+    consumer_queue.join()
+    producer_queue.join()
+
+    end = time.time()
+    return results, end - start
+
+def recognize_long_wav_file(base_url, audio_filepath, recognizer_construct=None, verbose=False):
+    recognize_url = base_url + '/recognize'
+    api_url = base_url + '/api'
+
+    requests_obj = requests.Session()
+    recognizer_id = send_create_recognizer(api_url, recognizer_construct, is_extended=True, requests_obj=requests_obj)
+
+    start = time.time()
+
+    results = []
+    for chunk in wav_file_iter(audio_filepath):
+        send_stream_audio(requests_obj, recognize_url, recognizer_id, chunk)
+        try:
+            result = send_get_result(requests_obj, recognize_url, recognizer_id, expected_message='returning results')
+            if verbose:
+                print result
+            results.append(result)
+        except Exception:
+            pass
+
+    send_end_session(requests_obj, recognize_url, recognizer_id)
+    result = send_get_result(requests_obj, recognize_url, recognizer_id)
+    results.append(result)
+    send_delete_recognizer(api_url, recognizer_id, requests_obj=requests_obj)
+
+    end = time.time()
+    return results, end - start
 
 # work is the JSON version of 'listfile work'.
-# audio_path is the audio path.
+# audio_file is the audio path.
 # recognizer construct is the rest of the JSON
 def get_audio_and_construct(work):
-    audio_path = work['audio_path']
+    audio_file = work['audio_file']
     recognizer_construct = {}
     allowed_keys = ['model_id', 'model_domain', 'transcripts', 'recognizer_type']
     for key in allowed_keys:
@@ -138,4 +233,4 @@ def get_audio_and_construct(work):
             recognizer_construct[key.replace('_', '-')] = work[key]
     if len(recognizer_construct) == 0:
         recognizer_construct = None
-    return audio_path, recognizer_construct
+    return audio_file, recognizer_construct
