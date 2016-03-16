@@ -7,7 +7,7 @@ The py/client directory contains an example python client.
 You will need to install python's requests module to use the example client.
 
 See the github wiki at https://github.com/cobaltspeech/cobalt-client/wiki
-for documentation on how to use this client with our API and result objects: "ASR Web Api" and "Result Objects Model".
+for documentation on how to use this client with our API and result objects: "ASR Web API" and "Result Objects Model".
 
 The audio directory contains a single 16khz audio file.
 
