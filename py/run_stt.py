@@ -55,6 +55,14 @@ class AudioSender:
             self.results_writer.write(msg)
         else:
             print results
+            json_results = json.loads(results)
+            for result in json_results['results']:
+                tokens = list()
+                if 'cobalt_object' in result and result['cobalt_object'] == 'stt_result':
+                    hypothesis = result['nbest'][0]['hypothesis']
+                    for token in hypothesis:
+                        tokens.append(token['value'])
+                print ' '.join(tokens)
 
     def run(self):
 
