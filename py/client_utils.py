@@ -219,7 +219,7 @@ def recognize_long_wav_file(base_url, audio_filepath, recognizer_construct=None,
     send_delete_recognizer(api_url, recognizer_id, requests_obj=requests_obj)
 
     end = time.time()
-    return results, end - start
+    return '\n'.join(results), end - start
 
 # work is the JSON version of 'listfile work'.
 # audio_file is the audio path.
